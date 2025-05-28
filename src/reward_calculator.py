@@ -1,197 +1,106 @@
+from src.robot_arm import RobotArm
+from config_manager import config
+import numpy as np
+
+
 class RewardCalculator:
     """
     Calculates rewards based on task execution logs and defined reward rules.
     """
     def __init__(self,
-                 product_completion_reward: float = 100.0,
-                 step_correct_reward: float = 20.0,
-                 invalid_robot_arm_id_penalty: float = -20.0,
-                 invalid_task_id_penalty: float = -10.0,
-                 move_cost_per_unit_distance: float = -1.0,
-                 task_switch_cost: float = -5.0,
-                 task_execution_cost_per_time_unit: float = -0.1):
+                 product_completion_reward: float = 200.0,
+                 step_correct_reward: float = 30.0,
+                 invalid_robot_arm_id_penalty: float = -30.0,
+                 invalid_task_id_penalty: float = -20.0,
+                 move_cost_per_unit_distance: float = -1.0):
         """
-        Initializes the RewardCalculator.
+        初始化奖励计算器.
 
         Args:
-            product_completion_reward: Reward for completing the final step of a product.
-            step_correct_reward: Reward for successfully completing any single process step.
-            invalid_robot_arm_id_penalty: Penalty for assigning a task to an invalid/wrong robot arm.
-            invalid_task_id_penalty: Penalty for assigning an invalid/wrong task.
-            move_cost_per_unit_distance: Cost for moving a mover per unit of distance.
-            task_switch_cost: Cost associated with a robot arm switching its current task.
-            task_execution_cost_per_time_unit: Cost per unit of time for task execution.
+            product_completion_reward: 完成全部工序的奖励（不考虑成品NG或OK情况）.
+            step_correct_reward: 当前任务分配合理的奖励.
+            invalid_robot_arm_id_penalty: 分配错误机械臂的惩罚.
+            invalid_task_id_penalty: 分配错误任务ID的惩罚.
+            move_cost_per_unit_distance: 每行动一个单位距离的惩罚系数.
         """
         self.product_completion_reward: float = product_completion_reward
         self.step_correct_reward: float = step_correct_reward
         self.invalid_robot_arm_id_penalty: float = invalid_robot_arm_id_penalty
         self.invalid_task_id_penalty: float = invalid_task_id_penalty
-        # Costs related to "常规任务成本"
         self.move_cost_per_unit_distance: float = move_cost_per_unit_distance
-        self.task_switch_cost: float = task_switch_cost
-        self.task_execution_cost_per_time_unit: float = task_execution_cost_per_time_unit
 
-    def calculate_reward(self,
-                         is_final_step: bool,
-                         step_successful: bool,
-                         invalid_arm_assignment: bool,
-                         invalid_task_assignment: bool,
-                         distance_moved: int = 0,
-                         task_switched: bool = False,
-                         task_execution_time: int = 0) -> float:
+    def calculate_reward(self, start_robot_arm: RobotArm, end_robot_arm: RobotArm, task_id: str, task_check_result: bool,
+                         task_execute_cost: float) -> float:
         """
-        Calculates the total reward for a given step/action.
-
+        计算当前任务分配行动的奖励值。
+        步骤：
+        1. 计算动子移动的奖励值
+        2. 计算任务分配结果的奖励值
+        3. 计算完成全部工序的奖励值
+        4. 计算任务执行的成本消耗
         Args:
-            is_final_step: True if the completed step was the final one for a product.
-            step_successful: True if the current process step was completed successfully.
-            invalid_arm_assignment: True if the task was assigned to a wrong robot arm.
-            invalid_task_assignment: True if a wrong task was assigned.
-            distance_moved: The distance the mover traveled for this task.
-            task_switched: True if the robot arm had to switch tasks.
-            task_execution_time: The time taken for the robot arm to execute the task.
-
+            start_robot_arm: 起点的机械臂
+            end_robot_arm: 终点的机械臂
+            task_id: 分配的任务id
+            task_check_result：任务检测结果
+            task_execute_cost：任务执行耗时
         Returns:
-            The calculated reward value.
-
-        Reward Rules (from README.md to be implemented in detail):
-        1. 产品完成工序最后一步：+100 (self.product_completion_reward)
-        2. 成功完成任一工序步骤：+20 (self.step_correct_reward)
-        3. 任务分配失败（任务错误）：-10 (self.invalid_task_id_penalty)
-        4. 任务分配失败（机械臂错误）：-20 (self.invalid_robot_arm_id_penalty)
-        5. 常规任务成本 =
-           - 移动成本：|location_end - location_start| (distance_moved * self.move_cost_per_unit_distance)
-           - 任务切换成本（若发生） (task_switched * self.task_switch_cost)
-           - 任务执行耗时（根据类型） (task_execution_time * self.task_execution_cost_per_time_unit)
+            本次行动的总奖励.
         """
-        reward = 0.0
+        # 计算动子移动成本
+        move_cost = self.calculate_move_cost(start_robot_arm, end_robot_arm)
 
-        # Penalties for errors
-        if invalid_arm_assignment:
-            reward += self.calculate_error_penalty(error_type="invalid_robot_arm")
-        if invalid_task_assignment:
-            reward += self.calculate_error_penalty(error_type="invalid_task")
+        # 计算任务分配的奖励/惩罚
+        delivery_reward = self.calculate_task_delivery_reward(start_robot_arm, end_robot_arm, task_check_result, task_id)
 
-        # Rewards for successful operations
-        if step_successful:
-            reward += self.calculate_product_completion_reward(is_final_step)
-            if not is_final_step : # Add step_correct_reward if it's not the final step (final step already includes a larger reward)
-                 reward += self.step_correct_reward
-        
-        # Costs
-        reward += distance_moved * self.move_cost_per_unit_distance
-        if task_switched:
-            reward += self.task_switch_cost
-        reward += task_execution_time * self.task_execution_cost_per_time_unit
-        
-        print(f"Calculated reward: {reward} (Final: {is_final_step}, Success: {step_successful}, InvalidArm: {invalid_arm_assignment}, InvalidTask: {invalid_task_assignment}, Dist: {distance_moved}, Switch: {task_switched}, Time: {task_execution_time})")
-        return reward
+        # 计算完成全部工序的奖励
+        all_completion_reward = self.calculate_completion_reward(task_check_result, task_id)
 
-    def calculate_product_completion_reward(self, is_final_step: bool) -> float:
+        # 计算总奖励
+        total_reward = move_cost + delivery_reward + all_completion_reward + task_execute_cost
+        return total_reward
+
+    def calculate_move_cost(self, start_robot_arm: RobotArm, end_robot_arm: RobotArm):
         """
-        Calculates reward related to product completion.
-        - Product complete (final step): +product_completion_reward
+        计算动子在行动中的移动成本。计算公式为 移动成本 = 移动距离 * 每单位距离的惩罚系数
         """
-        if is_final_step:
-            print(f"Reward: Product final step completed (+{self.product_completion_reward})")
-            return self.product_completion_reward
-        return 0.0
+        distance = np.abs(end_robot_arm.location - start_robot_arm.location)
+        return distance * self.move_cost_per_unit_distance
 
-    def calculate_error_penalty(self, error_type: str) -> float:
+    def calculate_task_delivery_reward(self, start_robot_arm: RobotArm, end_robot_arm: RobotArm, check_result: bool,
+                                       task_id: str):
         """
-        Calculates penalties for errors.
-        - Invalid task assignment: invalid_task_id_penalty
-        - Invalid robot arm assignment: invalid_robot_arm_id_penalty
+        计算任务分配的奖励和惩罚。如果任务检查通过，则获得奖励；如果不通过，分类讨论惩罚情况
         """
-        if error_type == "invalid_task":
-            print(f"Penalty: Invalid task assignment ({self.invalid_task_id_penalty})")
-            return self.invalid_task_id_penalty
-        elif error_type == "invalid_robot_arm":
-            print(f"Penalty: Invalid robot arm assignment ({self.invalid_robot_arm_id_penalty})")
-            return self.invalid_robot_arm_id_penalty
-        return 0.0
+        loading_action_list = config.get_setting("loading_action_list")  # 上料动作列表
 
-if __name__ == '__main__':
-    calculator = RewardCalculator()
+        if check_result:
+            return self.step_correct_reward
+        else:
+            if task_id not in end_robot_arm.task_list:
+                return self.invalid_robot_arm_id_penalty
+            if end_robot_arm.state != 0:
+                return self.invalid_robot_arm_id_penalty
+            if end_robot_arm.is_occupied is True:
+                return self.invalid_robot_arm_id_penalty
+            if task_id in loading_action_list:
+                if end_robot_arm.have_output is False:
+                    return self.invalid_task_id_penalty
+            else:
+                if (end_robot_arm.target_types is not None) and end_robot_arm.target_types[start_robot_arm.output_type] == 0:
+                    return self.invalid_robot_arm_id_penalty
+                if start_robot_arm.have_output is False:
+                    return self.invalid_robot_arm_id_penalty
+                if start_robot_arm.is_ng == 1:
+                    return self.invalid_robot_arm_id_penalty
+                return self.invalid_task_id_penalty
 
-    print("\n--- Example Calculations ---")
-
-    # Scenario 1: Successful final step, no errors, some costs
-    reward1 = calculator.calculate_reward(
-        is_final_step=True,
-        step_successful=True,
-        invalid_arm_assignment=False,
-        invalid_task_assignment=False,
-        distance_moved=5,
-        task_switched=True,
-        task_execution_time=10
-    )
-    # Expected: 100 (product_completion) - 5*1 (move_cost) - 5 (switch_cost) - 10*0.1 (exec_cost) = 100 - 5 - 5 - 1 = 89
-    print(f"Scenario 1 Reward: {reward1} (Expected: 89)")
-
-    # Scenario 2: Successful intermediate step, no errors, some costs
-    reward2 = calculator.calculate_reward(
-        is_final_step=False,
-        step_successful=True,
-        invalid_arm_assignment=False,
-        invalid_task_assignment=False,
-        distance_moved=2,
-        task_switched=False,
-        task_execution_time=5
-    )
-    # Expected: 20 (step_correct) - 2*1 (move_cost) - 0 (switch_cost) - 5*0.1 (exec_cost) = 20 - 2 - 0 - 0.5 = 17.5
-    print(f"Scenario 2 Reward: {reward2} (Expected: 17.5)")
-
-    # Scenario 3: Failed step due to invalid arm assignment
-    reward3 = calculator.calculate_reward(
-        is_final_step=False,
-        step_successful=False,
-        invalid_arm_assignment=True,
-        invalid_task_assignment=False,
-        distance_moved=0,
-        task_switched=False,
-        task_execution_time=0
-    )
-    # Expected: -20 (invalid_arm_penalty)
-    print(f"Scenario 3 Reward: {reward3} (Expected: -20)")
-
-    # Scenario 4: Failed step due to invalid task assignment, plus other costs that might still apply if action was attempted
-    reward4 = calculator.calculate_reward(
-        is_final_step=False,
-        step_successful=False, # Assuming step is not successful if there's an assignment error
-        invalid_arm_assignment=False,
-        invalid_task_assignment=True,
-        distance_moved=3, # e.g. mover went to a location before error was identified
-        task_switched=False,
-        task_execution_time=0
-    )
-    # Expected: -10 (invalid_task_penalty) - 3*1 (move_cost) = -10 - 3 = -13
-    print(f"Scenario 4 Reward: {reward4} (Expected: -13)")
-
-    # Scenario 5: Successful step but with high costs
-    reward5 = calculator.calculate_reward(
-        is_final_step=False,
-        step_successful=True,
-        invalid_arm_assignment=False,
-        invalid_task_assignment=False,
-        distance_moved=10,
-        task_switched=True,
-        task_execution_time=20
-    )
-    # Expected: 20 (step_correct) - 10*1 (move_cost) - 5 (switch_cost) - 20*0.1 (exec_cost) = 20 - 10 - 5 - 2 = 3
-    print(f"Scenario 5 Reward: {reward5} (Expected: 3)")
-
-    # Scenario 6: All penalties and costs
-    reward6 = calculator.calculate_reward(
-        is_final_step=False, # Does not matter if step_successful is False
-        step_successful=False,
-        invalid_arm_assignment=True,
-        invalid_task_assignment=True,
-        distance_moved=5,
-        task_switched=True, # Assume switch was attempted before error fully registered
-        task_execution_time=2 # Assume some minimal time before error stopped process
-    )
-    # Expected: -20 (invalid_arm) -10 (invalid_task) -5*1 (move) -5 (switch) -2*0.1 (exec) = -20-10-5-5-0.2 = -40.2
-    print(f"Scenario 6 Reward: {reward6} (Expected: -40.2)")
-
-    print("\nRewardCalculator class implementation complete with example usage.")
+    def calculate_completion_reward(self, check_result, task_id):
+        """
+        计算是否完成全部生产工序的函数。如果任务检查通过，且任务类型为下料，则认为完成全部工序
+        """
+        unloading_task_list = config.get_setting("unloading_task_list")
+        if check_result:
+            if task_id in unloading_task_list:
+                return self.product_completion_reward
+        return 0

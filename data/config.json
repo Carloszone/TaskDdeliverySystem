@@ -4,6 +4,7 @@
   "loading_task_list": [0],
   "checking_task_list": [1, 2, 4, 11, 12, 13],
   "assembly_task_list": [4],
+  "unloading_task_list": [5, 6, 7, 8, 9],
   "failure_states": [2, 3],
   "normal_states": [0, 1]
 }

@@ -79,7 +79,7 @@ class RobotArm:
         """
         检查机械臂是否可以执行当前任务。如果可以执行，返回True，否则返回False
         检查流程如下：
-        0. 判断起始机械臂是否为虚拟机械臂，虚拟机械臂不进行判定，直接返回True
+        0. 判断起始机械臂是否为虚拟机械臂，虚拟机械臂不进行判定，直接返回False
         1. 检查任务id是否在task_list中(self.task_list)；
         2. 检查机械臂状态是否为空闲(self.state)；
         3. 检查机械臂是否被动子占用(self.is_occupied)
@@ -93,10 +93,10 @@ class RobotArm:
         7. 返回结果
         """
         loading_action_list = config.get_setting("loading_action_list")  # 上料动作列表
-        visual_robot_arm_ids = config.get_setting("visual_robot_arm_ids")
+        visual_robot_arm_ids = config.get_setting("visual_robot_arm_ids")  # 虚拟机台编号
 
         if start_robot_arm.id in visual_robot_arm_ids:
-            return True
+            return False
         else:
             logging.info(f'开始检查机械臂(id={self.id})是否可以执行当前任务(id={self.task_id})')
             if task_id not in self.task_list:  # step 1
@@ -218,7 +218,6 @@ class RobotArm:
         normal_states = config.get_setting("normal_states")
         loading_task_list = config.get_setting("loading_task_list")  # 上料任务列表
 
-
         # 更新timer状态,如果timer不为0，开始计数
         if self.timer != 0:
             self.timer += 1
@@ -296,4 +295,3 @@ class RobotArm:
             "task_time": self.task_time,
             "timer": self.timer
         }
-

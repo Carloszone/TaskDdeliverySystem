@@ -12,7 +12,7 @@ class ConfigManager:
         # 确保只有一个实例
         if cls._instance is None:
             cls._instance = super(ConfigManager, cls).__new__(cls)
-            cls._instance._load_config() # 首次创建时加载配置
+            cls._instance._load_config()  # 首次创建时加载配置
         return cls._instance
 
     def _load_config(self):
@@ -21,7 +21,9 @@ class ConfigManager:
             return
 
         # 从JSON文件加载
-        config_file_path = os.path.join(os.path.dirname(__file__), './data/config.json')
+        current_script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_script_dir)
+        config_file_path = os.path.join(project_root, './data/config.json')
         try:
             with open(config_file_path, 'r') as f:
                 self._config_data = json.load(f)
@@ -53,3 +55,4 @@ class ConfigManager:
 
 # 创建一个全局可用的配置实例
 config = ConfigManager()
+print(config.get_setting('loading_action_list'))
