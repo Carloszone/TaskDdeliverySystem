@@ -1,0 +1,9 @@
+{
+  "loading_action_list": [0, 11, 12, 13],
+  "visual_robot_arm_ids": ["R0"],
+  "loading_task_list": [0],
+  "checking_task_list": [1, 2, 4, 11, 12, 13],
+  "assembly_task_list": [4],
+  "failure_states": [2, 3],
+  "normal_states": [0, 1]
+}
