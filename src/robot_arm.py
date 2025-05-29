@@ -77,60 +77,77 @@ class RobotArm:
 
     def execute_task_check(self, task_id, start_robot_arm) -> bool:
         """
-        检查机械臂是否可以执行当前任务。如果可以执行，返回True，否则返回False
+        检查机械臂是否可以执行当前任务，并返回检查信息
         检查流程如下：
-        0. 判断起始机械臂是否为虚拟机械臂，虚拟机械臂不进行判定，直接返回False
-        1. 检查任务id是否在task_list中(self.task_list)；
-        2. 检查机械臂状态是否为空闲(self.state)；
-        3. 检查机械臂是否被动子占用(self.is_occupied)
-        4. 检查任务类型是否为上料动作
-        5. 对于上料料动作：
-            5.1 检测机械臂是否有输出（self.have_output）
-        6. 对于下料动作：
-            6.1 检查起点机械臂是否有输出（start_robot_arm.have_output）
-            6.2 检测起点机械臂的输出是否是终点机械臂需要的类型（self.target_types）
-            6.3 检测起点机械臂的输出是否有瑕疵（start_robot_arm.is_ng）
-        7. 返回结果
+        0. 判断起始机械臂是否为虚拟机械臂
+        1. 对于起点机械臂：
+            1.1 检查是否为虚拟机械臂
+            1.2 虚拟机械臂直接通过
+            1.3 非虚拟机械臂，检查is_occupied字段
+        2. 对于终点机械臂：
+            2.0 检查终点机械臂是否为虚拟机械臂，是则为无效任务
+`           2.1 检查任务id是否在task_list中(self.task_list)；
+            2.2 检查机械臂状态是否为空闲(self.state)；
+            2.3 检查机械臂是否被动子占用(self.is_occupied)
+            2.4 检查任务类型是否为上料动作
+            2.5 对于上料料动作：
+                2.5.1 检测机械臂是否有输出（self.have_output）
+            2.6 对于下料动作：
+                2.6.1 检查起点机械臂是否有输出（start_robot_arm.have_output）
+                2.6.2 检测起点机械臂的输出是否是终点机械臂需要的类型（self.target_types）
+                2.6.3 检测起点机械臂的输出是否有瑕疵（start_robot_arm.is_ng）`
+        3. 返回结果
+
+        return格式
         """
+        # 变量准备
         loading_action_list = config.get_setting("loading_action_list")  # 上料动作列表
         visual_robot_arm_ids = config.get_setting("visual_robot_arm_ids")  # 虚拟机台编号
+        start_robot_arm_id = start_robot_arm.id
 
-        if start_robot_arm.id in visual_robot_arm_ids:
-            return False
-        else:
-            logging.info(f'开始检查机械臂(id={self.id})是否可以执行当前任务(id={self.task_id})')
-            if task_id not in self.task_list:  # step 1
-                logging.info('机械臂任务类型不匹配，无法执行该任务')
+        if self.id == start_robot_arm_id:  # 如果是起点机械臂
+            if self.id not in visual_robot_arm_ids and self.is_occupied is False:
                 return False
-            if self.state != 0:  # step 2
-                logging.info('机械臂正忙，无法执行该任务')
+        else:  # 如果是终点机械臂
+            if start_robot_arm.id in visual_robot_arm_ids:
                 return False
-            if self.is_occupied is True:  # step 3
-                logging.info('机械臂被其他动子占用，无法执行该任务')
-                return False
-            if task_id in loading_action_list:  # step 4
-                logging.info('当前任务含上料动作')
-                if self.have_output is False:  # step 5
-                    logging.info('机械臂没有输出信息，无法执行该任务')
-                    return False
             else:
-                logging.info('当前任务含下料动作')
-                if (self.target_types is not None) and self.target_types[start_robot_arm.output_type] == 0:  # step 6
-                    logging.info('传入的工件与机械臂的需求不符，无法执行该任务')
+                logging.info(f'开始检查机械臂(id={self.id})是否可以执行当前任务(id={self.task_id})')
+                if task_id not in self.task_list:  # step 1
+                    logging.info('机械臂任务类型不匹配，无法执行该任务')
                     return False
-                if start_robot_arm.have_otuput is False:
-                    logging.info('没有传入的工件，无法执行该任务')
+                if self.state != 0:  # step 2
+                    logging.info('机械臂正忙，无法执行该任务')
                     return False
-                if start_robot_arm.is_ng == 1:
-                    logging.info('传入的工件存在瑕疵，无法执行该任务')
+                if self.is_occupied is True:  # step 3
+                    logging.info('机械臂被其他动子占用，无法执行该任务')
                     return False
-            logging.info('检查通过，机械臂可以执行该任务')
-            return True
+                if task_id in loading_action_list:  # step 4
+                    logging.info('当前任务含上料动作')
+                    if self.have_output is False:  # step 5
+                        logging.info('机械臂没有可输出对象，无法执行该任务')
+                        return False
+                else:
+                    logging.info('当前任务含下料动作')
+                    if (self.target_types is not None) and self.target_types[start_robot_arm.output_type] == 0:
+                        logging.info('传入的工件与机械臂的需求不符，无法执行该任务')
+                        return False
+                    if start_robot_arm.have_otuput is False:
+                        logging.info('没有传入的工件，无法执行该任务')
+                        return False
+                    if start_robot_arm.is_ng == 1:
+                        logging.info('传入的工件存在瑕疵，无法执行该任务')
+                        return False
+                logging.info('检查通过，机械臂可以执行该任务')
+                return True
 
     def execute_task(self, task_id: str, start_robot_arm: "RobotArm"):
         """
         执行任务，更新机械臂状态，计算和返回总成本：时间成本+任务切换成本（如有）。
         工作步骤：
+        0. 检查是否为起点机械臂：
+            0.1 起点的虚拟机械臂不执行任何任务
+            0.2 起点的非虚拟机械臂，执行上料任务
         1. 检查是否需要切换任务，如切换任务，记录切换成本
         2. 一般属性更新：
             2.1 动子改为占用状态
@@ -150,54 +167,68 @@ class RobotArm:
                 无任务属性更新
         4. 计算时间成本并返回
         """
+        visual_robot_arm_ids = config.get_setting("visual_robot_arm_ids")  # 虚拟机台编号
         loading_task_list = config.get_setting("loading_task_list")  # 上料任务列表
         checking_task_list = config.get_setting("checking_task_list")  # 质检任务列表
         assembly_task_list = config.get_setting("assembly_task_list")  # 拼装任务列表
         loading_action_list = config.get_setting("loading_action_list")  # 上料动作列表
 
-        # 检查是否需要切换任务
-        switch_cost = 0
-        if task_id not in self.available_task_ids:
-            logging.info(f'开始切换任务。当前任务类型：(id={self.task_id}) -> 目标任务类型：(id={task_id})')
-            self.switch_task(new_task_id=task_id)
-            switch_cost = self.feature_switch_time
-
-        # 执行任务，更新状态
-        self.is_occupied = True  # 动子设为占用状态
-        self.state = 1  # 状态更改为工作中
-        if self.target_types is not None:
-            self.target_types[start_robot_arm.output_type] -= 1  # 对应处理对象更新
-        self.timer = 1  # 计数器开始工作
-
-        # 上料类任务的状态更新
-        if task_id in loading_task_list:
-            self.have_output = True
-
-        # 质检类任务的状态更新
-        if task_id in checking_task_list:
-            if task_id in loading_action_list:  # 如果是上料动作（指机械臂将其处理工件放置到动子上）
-                self.have_output = False  # 更新输出状态（动子上料后，机械臂为空，无法再次上料）
-                self.output_type = None
-                self.is_ng = -1
+        # 判断是否为起点机械臂：
+        if self.id == start_robot_arm.id:
+            if self.id in visual_robot_arm_ids:
+                logging.info(f'叫车任务')
+                return 0
             else:
+                logging.info(f'派车任务，'
+                             f'动子从机械臂(id={start_robot_arm.id})前往机械臂(id={self.id})去执行任务(id={task_id})')
+                self.is_occupied = False
+                return 0
+        else:
+            # 检查是否需要切换任务
+            switch_cost = 0
+            if task_id not in self.available_task_ids:
+                logging.info(f'开始切换任务。当前任务类型：(id={self.task_id}) -> 目标任务类型：(id={task_id})')
+                self.switch_task(new_task_id=task_id)
+                switch_cost = self.feature_switch_time
+
+            # 执行任务，更新状态
+            self.is_occupied = True  # 动子设为占用状态
+            self.state = 1  # 状态更改为工作中
+            if self.target_types is not None:
+                self.target_types[start_robot_arm.output_type] -= 1  # 对应处理对象更新
+            self.timer = 1  # 计数器开始工作
+
+            # 上料类任务的状态更新
+            if task_id in loading_task_list:
                 self.have_output = True
-                self.output_type = start_robot_arm.output_type  # 任务输出的工件id取决于动子传入的结果
-                # 模拟质检结果
-                if random.random() < self.ng_rate:
-                    self.is_ng = 1
+
+            # 质检类任务的状态更新
+            if task_id in checking_task_list:
+                if task_id in loading_action_list:  # 如果是上料动作（指机械臂将其处理工件放置到动子上）
+                    self.have_output = False  # 更新输出状态（动子上料后，机械臂为空，无法再次上料）
+                    self.output_type = None
+                    self.is_ng = -1
                 else:
-                    self.is_ng = 0
+                    self.have_output = True
+                    self.output_type = start_robot_arm.output_type  # 任务输出的工件id取决于动子传入的结果
+                    # 模拟质检结果
+                    if random.random() < self.ng_rate:
+                        self.is_ng = 1
+                    else:
+                        self.is_ng = 0
 
-        # 组装类任务的状态更新
-        if task_id in assembly_task_list:
-            if task_id in loading_action_list:
-                self.have_output = False
-                self.output_type = None
-                self.is_ng = -1
-            else:
-                self.have_output = True
-                self.output_type = start_robot_arm.output_type  # 任务输出的工件id取决于动子传入的结果
-                self.is_ng = -1
+            # 组装类任务的状态更新
+            if task_id in assembly_task_list:
+                if task_id in loading_action_list:
+                    self.have_output = False
+                    self.output_type = None
+                    self.is_ng = -1
+                else:
+                    self.have_output = True
+                    self.output_type = start_robot_arm.output_type  # 任务输出的工件id取决于动子传入的结果
+                    self.is_ng = -1
+
+            # 下料类任务的状态更新
 
         # 返回结果
         task_cost = self.task_time  # 记录执行结果
