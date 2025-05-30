@@ -12,23 +12,30 @@ class RewardCalculator:
                  product_completion_reward: float = 200.0,
                  step_correct_reward: float = 30.0,
                  invalid_task_penalty: float = -30.0,
+                 path_error_penalty: float = -10,
+                 collision_penalty: float = -10,
                  move_cost_per_unit_distance: float = -1.0):
         """
-        初始化奖励计算器.
+        初始化奖励计算器。
 
         Args:
             product_completion_reward: 完成全部工序的奖励（不考虑成品NG或OK情况）.
             step_correct_reward: 当前任务分配合理的奖励.
             invalid_task_penalty: 任务分配错误的惩罚
+            path_error_penalty: 路径规划错误的惩罚
+            collision_penalty： 发生碰撞的惩罚
             move_cost_per_unit_distance: 每行动一个单位距离的惩罚系数.
         """
         self.product_completion_reward: float = product_completion_reward
         self.step_correct_reward: float = step_correct_reward
         self.invalid_task_penalty: float = invalid_task_penalty
+        self.path_error_penalty: float = path_error_penalty
+        self.collision_penalty: float = collision_penalty
         self.move_cost_per_unit_distance: float = move_cost_per_unit_distance
 
     def calculate_reward(self, start_robot_arm: RobotArm, end_robot_arm: RobotArm, task_id: str,
-                         task_check_result: bool, task_execute_cost: float) -> float:
+                         is_path_error: bool, is_collision: bool, task_check_result: bool,
+                         task_execute_cost: float) -> float:
         """
         计算当前任务分配行动的奖励值。
         步骤：
@@ -40,11 +47,15 @@ class RewardCalculator:
             start_robot_arm: 起点的机械臂
             end_robot_arm: 终点的机械臂
             task_id: 分配的任务id
+            is_path_error: 是否发生路径错误（逆行）
+            is_collision： 是否发生碰撞
             task_check_result: 任务检测结果
-            task_execute_cost: 任务执行耗时
+            task_execute_cost: 任务执行成本
+
         Returns:
             本次行动的总奖励.
         """
+
         # 计算动子移动成本
         move_cost = self.calculate_move_cost(start_robot_arm, end_robot_arm)
 
@@ -56,8 +67,17 @@ class RewardCalculator:
         all_completion_reward = self.calculate_completion_reward(task_check_result, task_id)
         logging.info(f"由于完成全部工序而获得的奖励值为{all_completion_reward}")
 
+        # 计算规划类惩罚
+        path_error_cost = 0  # 逆行处罚
+        if is_path_error:
+            path_error_cost = self.path_error_penalty
+
+        collision_cost = 0  # 碰撞处罚
+        if collision_cost:
+            collision_cost = self.collision_penalty
+
         # 计算总奖励
-        total_reward = move_cost + delivery_reward + all_completion_reward + task_execute_cost
+        total_reward = move_cost + delivery_reward + all_completion_reward + task_execute_cost + path_error_cost + collision_cost
         logging.info(f'执行任务的成本为：{task_execute_cost}')
         logging.info(f'本次行动的奖励总计为:{total_reward}')
         return total_reward
