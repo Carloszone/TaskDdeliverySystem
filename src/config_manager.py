@@ -23,9 +23,9 @@ class ConfigManager:
         # 从JSON文件加载
         current_script_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(current_script_dir)
-        config_file_path = os.path.join(project_root, './data/config.json')
+        config_file_path = os.path.join(project_root, 'data\config.json')
         try:
-            with open(config_file_path, 'r') as f:
+            with open(config_file_path, 'r', encoding='utf-8') as f:
                 self._config_data = json.load(f)
             self._config_loaded = True
             logging.info(f"成功读取配置信息。配置文件地址：{config_file_path}")
@@ -55,4 +55,3 @@ class ConfigManager:
 
 # 创建一个全局可用的配置实例
 config = ConfigManager()
-print(config.get_setting('loading_action_list'))
