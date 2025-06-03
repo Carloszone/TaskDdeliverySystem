@@ -369,19 +369,19 @@ class RobotArm:
         self.output_id: int = main_task_data['output_id']  # 输出的工件id，没有则为-1。
         """
         return {
-            "id": self.id,
-            "role_id": self.role_id,
-            "role_list": self.role_list,
-            "location": self.location,
-            "all_task_ids": self.all_task_ids,
-            "accept_ng": self.accept_ng,
-            "task_id": self.task_id,
-            "state": self.state,
-            "have_output": self.have_output,
-            "is_occupied": self.is_occupied,
-            "target_ids": self.target_ids,
-            "is_ng": self.is_ng,
-            "output_id": self.output_id
+            "id": self.id,  # str
+            "role_id": self.role_id,  # str
+            "role_list": self.role_list,  # list[str]
+            "location": self.location,  # float
+            "all_task_ids": self.all_task_ids,  # list[str]
+            "accept_ng": self.accept_ng,  # bool
+            "task_id": self.task_id,  # str
+            "state": self.state,  # int
+            "have_output": self.have_output,  # bool
+            "is_occupied": self.is_occupied,  # bool
+            "target_ids": self.target_ids,   # list[str]
+            "is_ng": self.is_ng,  # bool
+            "output_id": self.output_id  # str
         }
 
 
